@@ -17,6 +17,10 @@
 #define FLAT_THRESHOLD 0.98
 #define SHAKE_THRESHOLD
 
+#define SW1_PIN 02
+#define SW2_PIN 22
+#define BUTTON_SW1 SW1_PIN
+#define BUTTON_SW2 SW2_PIN
 
 char send_buffer[BUFFER_SIZE] = {0}; // add characters to a buffer
 int buffer_index = 0;
@@ -33,20 +37,23 @@ enum state myState = IDLE;
 
 // Button task to go in send state
 // Need an interrupt in main
-void button1_callback(uint gpio, uint32_t events) {
+void button_callback(uint gpio, uint32_t events) {
     // Button 1 pressed: send the message
-    if (myState == IDLE) {
-        myState = SEND;
+    
+    if (gpio == BUTTON_SW1) {
+        printf("hi");
+        if (myState == IDLE) {
+            myState = SEND;
     }
+    } else if (gpio == BUTTON_SW2) {
+        printf("hello");
+        if (buffer_index < BUFFER_SIZE - 1) {
+            send_buffer[buffer_index++] = ' ';
+    }
+    }
+    
 }
 
-void button2_callback(uint gpio, uint32_t events) {
-    // Button 2 pressed: add a space
-    if (buffer_index < BUFFER_SIZE - 1) {
-        send_buffer[buffer_index++] = ' ';
-    }
-}
- 
 // Communications task
 void commTask(void *pvParameters) {
     (void)pvParameters;
@@ -54,14 +61,18 @@ void commTask(void *pvParameters) {
     while (1) {
         if (myState == SEND) {
             
+            
             //maybe for loop to go through send_buffer
-            printf(send_buffer);
+            printf("Sending");
+            //printf(send_buffer);
+            for (int i = 0; i < sizeof(send_buffer); i++) {
+                printf("%c",send_buffer[i]);
+            }
             
             // maybe a \n at the end of msg
 
             // Clear buffer
-            memset()
-            send_buffer = {0}
+            memset(send_buffer, 0, sizeof(send_buffer[0])*BUFFER_SIZE);
             buffer_index = 0;
 
             // then change the state back to idle
@@ -95,10 +106,12 @@ void imu_task(void *pvParameters) {
         if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0) {
             if (buffer_index < (BUFFER_SIZE-1)) {
                 if (az > FLAT_THRESHOLD) {
+                    printf("dot");
                     send_buffer[buffer_index++] = '.';
                 }
                 //DASH: rotating 90 degrees
                 else if (ay > TILT_THRESHOLD) {
+                    printf("dash");
                     send_buffer[buffer_index++] = '-';
                 }
             }
@@ -139,18 +152,20 @@ int main() {
     stdio_init_all();
     sleep_ms(2000); //Wait to see the output.
     init_hat_sdk();
+    init_sw1();
+    init_sw2();
     while (!stdio_usb_connected()){
         sleep_ms(10);
     } 
     printf("Start tests\n");
         
     // Setup buttons (already initialized in SDK, we only attach callbacks)
-    gpio_set_irq_enabled_with_callback(BUTTON_SW1, GPIO_IRQ_EDGE_FALL, true, &button1_callback);
-    gpio_set_irq_enabled_with_callback(BUTTON_SW2, GPIO_IRQ_EDGE_FALL, true, &button2_callback);
+    gpio_set_irq_enabled_with_callback(BUTTON_SW1, GPIO_IRQ_EDGE_FALL, true, button_callback);
+    gpio_set_irq_enabled(BUTTON_SW2, GPIO_IRQ_EDGE_FALL, true);
 
     // Create tasks
     xTaskCreate(imu_task, "IMUTask", 256, NULL, 1, NULL);
-    xTaskCreate(comm_task, "CommTask", 512, NULL, 2, NULL);
+    xTaskCreate(commTask, "CommTask", 512, NULL, 2, NULL);
     
     // Start the FreeRTOS scheduler
     vTaskStartScheduler();
