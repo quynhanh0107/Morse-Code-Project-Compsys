@@ -11,6 +11,8 @@
 #include "tusb.h"
 
 #include "tkjhat/sdk.h"
+#include "buzzer.h"
+#include "morse_translate.h"
 
 
 #define BUFFER_SIZE 40
@@ -24,11 +26,32 @@
 #define BUTTON_SW1 SW1_PIN
 #define BUTTON_SW2 SW2_PIN
 
+QueueHandle_t inputQueue;
+
+TaskHandle_t imuTaskHandle = NULL;
+
 char send_buffer[BUFFER_SIZE] = {0}; // add characters to a buffer
 int buffer_index = 0;
 
-char recv_buffer[BUFFER_SIZE];
+char recv_buffer[BUFFER_SIZE]= {0};
 int  recv_index = 0;
+
+int happy_birthday[][2] = {
+    {NOTE_C4, 400}, {NOTE_C4, 200}, {NOTE_D4, 400}, {NOTE_C4, 400},
+    {NOTE_F4, 400}, {NOTE_E4, 800},
+    {NOTE_C4, 400}, {NOTE_C4, 200}, {NOTE_D4, 400}, {NOTE_C4, 400},
+    {NOTE_G4, 400}, {NOTE_F4, 800},
+    {REST, 0}
+};
+
+int iphone_alarm[][2] = {
+    {NOTE_C5, 300}, {NOTE_E5, 300}, {NOTE_G5, 300}, {NOTE_C6, 600},
+    {NOTE_G5, 300}, {NOTE_E5, 300}, {NOTE_C5, 600},
+    {NOTE_C5, 300}, {NOTE_E5, 300}, {NOTE_G5, 300}, {NOTE_C6, 600},
+    {REST, 200},  // Short pause
+    {NOTE_C6, 400}, {NOTE_B5, 400}, {NOTE_A5, 400}, {NOTE_G5, 400},
+    {REST, 0}      // End
+};
 
 // Introducing state
 enum state {IDLE=1, SEND, RECEIVE, UPDATE};
@@ -44,10 +67,15 @@ void button_callback(uint gpio, uint32_t events) {
     // Button 1 pressed: send the message
     static int space_count = 0;
     if (gpio == BUTTON_SW1) {
-        if (myState == IDLE) {
+        if (myState == RECEIVE) {
+            printf("RECEIVE and then to SEND");
+            myState = SEND;
+            //xTaskNotifyGive(imuTaskHandle);
+        } else if (myState == IDLE) {
+            printf("IDLE and then to RECEIVE");
             myState = RECEIVE;
             allow_input = true;
-    }
+        }
     } else if (gpio == BUTTON_SW2) {
         if (imu_flag) {
             send_buffer[buffer_index++] = ' ';
@@ -59,13 +87,24 @@ void button_callback(uint gpio, uint32_t events) {
             space_count = 0;
             if (myState == IDLE) {
                 myState = SEND;
-            }
+            } 
         }    
     }
     
 }
 
-// Communications task
+void feedback(const char *text) {
+    for (int i = 0; i < strlen(text) + 1; i++) {
+        if (text[i] == '.') {
+            buzzer_play_tone(440,500);
+        } else if (text[i] == '-') {
+            buzzer_play_tone(800,200);
+        } else if (text[i] == ' ') {
+            buzzer_play_tone(200,800);
+        }
+    }
+}
+
 void commTask(void *pvParameters) {
     (void)pvParameters;
     
@@ -83,33 +122,66 @@ void commTask(void *pvParameters) {
             vTaskDelay(pdMS_TO_TICKS(10000));
 
             // Clear buffer
-            memset(send_buffer, 0, sizeof(send_buffer[0])*BUFFER_SIZE);
+            memset(send_buffer, 0, BUFFER_SIZE);
             buffer_index = 0;
 
             // then change the state back to idle
-            myState = IDLE;
             clear_display();
+            myState = IDLE;
+            xTaskNotifyGive(imuTaskHandle);
 
         } else if (myState == RECEIVE  && allow_input) {
-            printf("Type your message: ");
-            fflush(stdout);
-            if (fgets(recv_buffer, sizeof(recv_buffer), stdin)) {
-                recv_buffer[strcspn(recv_buffer, "\n")] = '\0';
-                printf("something");
-                fflush(stdout);
-                if (strlen(recv_buffer) > 0) {
-                    printf("Message typed: %s\n", recv_buffer);
+            char c;
 
-                    write_text(recv_buffer);
+            if (xQueueReceive(inputQueue, &c, 0) == pdTRUE) {
+
+                if (c == '\n' || c == '\r') {
+                    recv_buffer[recv_index] = '\0';
+
+                    init_buzzer();
+                    printf("Received: %s\n", recv_buffer);
+                    buzzer_play_melody(iphone_alarm);
+                    
+                    // check if the received message is in morse
+                    bool is_morse = true;
+                    for (int i = 0; recv_buffer[i]; i++) {
+                        if (recv_buffer[i] != '.' && recv_buffer[i] != '-' && recv_buffer[i] != ' ') {
+                            is_morse = false;
+                            break;
+                        }
+                    }
+
+                    if (is_morse) {
+                        char decoded_text[BUFFER_SIZE] = {0};
+                        decode_morse_message(recv_buffer, decoded_text);
+
+                        printf("Decoded text: %s\n", decoded_text);
+                        write_text(decoded_text);    // sisplay decoded text
+                        feedback(recv_buffer);
+                        vTaskDelay(pdMS_TO_TICKS(10000));
+                    } else {
+                        // regular text
+                        write_text(recv_buffer);
+                        vTaskDelay(pdMS_TO_TICKS(10000));
+                    }
+
+                    /*write_text(recv_buffer);
+                    feedback(recv_buffer);
+                    vTaskDelay(pdMS_TO_TICKS(10000));*/   // show message
+
+                    memset(recv_buffer, 0, BUFFER_SIZE);
+                    recv_index = 0;
                     allow_input = false;
-                } else {
-                    printf("Empty message.\n");
+
+                    
+                    clear_display();
+                    vTaskDelay(pdMS_TO_TICKS(200));
+                }
+                else if (recv_index < BUFFER_SIZE - 1) {
+                    recv_buffer[recv_index++] = c;
                 }
             }
-            myState = IDLE;
-            printf("End message");
-            clear_display();
-        }
+    }
 
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -131,14 +203,13 @@ void imu_task(void *pvParameters) {
     } else {
         printf("Failed to initialize ICM-42670P.\n");
     }
-    
     init_buzzer();
     init_red_led();
-    
-    // Start collection data here. Infinite loop.
-    while (1)
-    {
-        if (imu_flag) {
+    for(;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        printf("IMU activated");
+        while (1)
+        {
             if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0) {
                 if (buffer_index < (BUFFER_SIZE-3)) {
                     if (az > FLAT_THRESHOLD) {
@@ -167,9 +238,13 @@ void imu_task(void *pvParameters) {
                 printf("Failed to read imu data\n");
             }
             vTaskDelay(pdMS_TO_TICKS(400));
+            if (myState != IDLE) {
+                break;
+            }   
         }
-        
     }
+    // Start collection data here. Infinite loop.
+    
 
 }
 
@@ -180,7 +255,7 @@ static void usbTask(void *arg) {
     }
 }
 
-void tud_cdc_rx_cb(uint8_t itf) {
+/*void tud_cdc_rx_cb(uint8_t itf) {
     uint8_t buf[BUFFER_SIZE + 1];
     uint32_t count = tud_cdc_n_read(itf, buf, sizeof(buf) - 1);
 
@@ -196,26 +271,19 @@ void tud_cdc_rx_cb(uint8_t itf) {
     // Send acknowledgment back to host
     tud_cdc_n_write(itf, (uint8_t const *)"OK\n", 3);
     tud_cdc_n_write_flush(itf);
-}
-
-// not needed until receiving
-// Handling display update
-/*void displayTask(void *pvParameters) {
-    init_display();
-    while (1) {
-    
-        if (myState == UPDATE) {
-        
-            // Functionality of state
-            update_screen();
-            
-            // State transition UPDATE -> IDLE
-            myState = IDLE;
-        }
-    
-        vTaskDelay(400);
-    }
 }*/
+
+void tud_cdc_rx_cb(uint8_t itf) {
+    uint8_t buf[64];
+    uint32_t count = tud_cdc_n_read(itf, buf, sizeof(buf));
+
+    for (uint32_t i = 0; i < count; i++) {
+        char c = buf[i];
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        xQueueSendFromISR(inputQueue, &c, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
+}
 
 int main() {
     stdio_init_all();
@@ -224,10 +292,12 @@ int main() {
     init_sw1();
     init_sw2();
     init_display();
+    init_buzzer();
     while (!stdio_usb_connected()){
         sleep_ms(10);
     } 
     printf("Start tests\n");
+    buzzer_play_melody(happy_birthday);
     /*write_text("Start...");
     vTaskDelay(400);
     clear_display();*/
@@ -236,11 +306,14 @@ int main() {
     gpio_set_irq_enabled(BUTTON_SW2, GPIO_IRQ_EDGE_FALL, true);
 
     // Create tasks
-    xTaskCreate(imu_task, "IMUTask", 256, NULL, 1, NULL);
+    xTaskCreate(imu_task, "IMUTask", 256, NULL, 1, &imuTaskHandle);
+    xTaskNotifyGive(imuTaskHandle);
     xTaskCreate(commTask, "CommTask", 512, NULL, 2, NULL);
     TaskHandle_t hUsb = NULL;
     xTaskCreate(usbTask, "usb", 1024, NULL, 3, &hUsb);
     //xTaskCreate(displayTask, "displayTask", 512, NULL, 2, NULL);
+    inputQueue = xQueueCreate(64, sizeof(char));
+
     #if (configNUMBER_OF_CORES > 1)
         vTaskCoreAffinitySet(hUsb, 1u << 0);
     #endif
@@ -248,6 +321,5 @@ int main() {
     //usb_serial_init();
     // Start the FreeRTOS scheduler
     vTaskStartScheduler();
-
     return 0;
 }
