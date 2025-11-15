@@ -10,6 +10,7 @@
 
 #include <stdio.h>
 #include "pico/stdlib.h"
+#include "tkjhat/sdk.h"
 
 // define
 #define NOTE_B0  31
@@ -103,13 +104,7 @@
 #define NOTE_DS8 4978
 #define REST      0
 
-// Initialize the buzzer pin
-void buzzer_init(uint pin);
-
-// Play a tone on the buzzer
-void buzzer_play_tone(uint pin, int frequency, int duration_ms);
-
 // Play a melody (array of {frequency, duration_ms})
-void buzzer_play_melody(uint pin, int melody[][2]);
+void buzzer_play_melody(int melody[][2]);
 
 #endif /* buzzer_h */
