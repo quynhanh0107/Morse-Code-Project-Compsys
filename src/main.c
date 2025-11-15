@@ -141,7 +141,7 @@ void commTask(void *pvParameters) {
                     init_buzzer();
                     printf("Received: %s\n", recv_buffer);
                     buzzer_play_melody(iphone_alarm);
-                    
+
                     // check if the received message is in morse
                     bool is_morse = true;
                     for (int i = 0; recv_buffer[i]; i++) {
@@ -238,7 +238,7 @@ void imu_task(void *pvParameters) {
                 printf("Failed to read imu data\n");
             }
             vTaskDelay(pdMS_TO_TICKS(400));
-            if (myState != IDLE) {
+            if (myState != IDLE) { //maybe change it to if (myState != SEND)
                 break;
             }   
         }
