@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 
 #include <pico/stdlib.h>
@@ -19,7 +20,9 @@
 
 #define TILT_THRESHOLD 0.98
 #define FLAT_THRESHOLD 0.98
-#define SHAKE_THRESHOLD
+#define SHAKE_THRESHOLD 50.0
+#define FREEFALL_THRESHOLD 0.30
+#define DEBOUNCE_TIME 5000
 
 #define SW1_PIN 02
 #define SW2_PIN 22
@@ -59,7 +62,6 @@ enum state {IDLE=1, SEND, RECEIVE, UPDATE};
 // Global state variable, initialized to waiting state
 enum state myState = IDLE;
 volatile bool imu_flag = true;
-bool allow_input = true;
 
 // Button task to go in send state
 // Need an interrupt in main
@@ -74,7 +76,6 @@ void button_callback(uint gpio, uint32_t events) {
         } else if (myState == IDLE) {
             printf("IDLE and then to RECEIVE");
             myState = RECEIVE;
-            allow_input = true;
         }
     } else if (gpio == BUTTON_SW2) {
         if (imu_flag) {
@@ -130,7 +131,7 @@ void commTask(void *pvParameters) {
             myState = IDLE;
             xTaskNotifyGive(imuTaskHandle);
 
-        } else if (myState == RECEIVE  && allow_input) {
+        } else if (myState == RECEIVE) {
             char c;
 
             if (xQueueReceive(inputQueue, &c, 0) == pdTRUE) {
@@ -156,7 +157,7 @@ void commTask(void *pvParameters) {
                         decode_morse_message(recv_buffer, decoded_text);
 
                         printf("Decoded text: %s\n", decoded_text);
-                        write_text(decoded_text);    // sisplay decoded text
+                        write_text(decoded_text);    // display decoded text
                         feedback(recv_buffer);
                         vTaskDelay(pdMS_TO_TICKS(10000));
                     } else {
@@ -171,7 +172,6 @@ void commTask(void *pvParameters) {
 
                     memset(recv_buffer, 0, BUFFER_SIZE);
                     recv_index = 0;
-                    allow_input = false;
 
                     
                     clear_display();
@@ -208,44 +208,48 @@ void imu_task(void *pvParameters) {
     for(;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("IMU activated");
-        int freefall_count = 0;
+        int lift_count = 0;
         while (1)
         {
             if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0) {
-                float accerl_mag = sqrtf(ax*ax + ay*ay + az*az);
+                //float accerl_mag = sqrt(ax*ax + ay*ay + az*az);
+                //float gyro_mag = sqrt(gx * gx + gy * gy + gz * gz);
                 if (buffer_index < (BUFFER_SIZE-3)) {
-                    if (az > FLAT_THRESHOLD || fabs(az) > SHAKE_THRESHOLD) {
+                    if ((fabs(gx) > 70 || fabs(gy) > 130 || fabs(gz) > 180) && fabs(ax) > 1.5)  { //az > FLAT_THRESHOLD ||
                         printf("dot\n");
                         send_buffer[buffer_index++] = '.';
                         blink_red_led(1);
                         buzzer_play_tone(440,500);
                         vTaskDelay(pdMS_TO_TICKS(2000));
+                        lift_count = 0;
                     }
                     //DASH: rotating 90 degrees
-                    else if (ay > TILT_THRESHOLD) {
+                    /*else if (ay > TILT_THRESHOLD) {
                         printf("dash\n");
                         send_buffer[buffer_index++] = '-';
                         blink_red_led(2);
                         buzzer_play_tone(800,200);
                         vTaskDelay(pdMS_TO_TICKS(2000));
-                    }
-                    else if (accerl_mag < FREEFALL_THRESHOLD) {
-                        freefall_count++;
-                        if (freefall_count >= 2) { // require two consecutive readings below threshold
-                            send_buffer[buffer_index++] = ' ';
-                            blink_red_led(3);
+                    }*/
+                    else if (fabs(az) > 0.6 && fabs(az) < 2.0 && fabs(ax) < 1.0 && fabs(ay) < 1.0 && (fabs(gx) > 5 && fabs(gy) > 5) && (fabs(gx) < 70 && fabs(gy) < 100)) {
+                        lift_count++;
+                        printf("count %d \n", lift_count);
+                        if (lift_count >= 3) { // require two consecutive readings below threshold
+                            printf("dash\n");
+                            send_buffer[buffer_index++] = '-';
+                            blink_red_led(1);
+                            buzzer_play_tone(440,500);
+                            lift_count = 0;
                             vTaskDelay(pdMS_TO_TICKS(2000));
-                            freefall_count = 0;
+                            
                         }
-                    } else {
-                        freefall_count = 0; // reset counter if reading is above threshold
-                    }
+                    } 
                 }
                 else {
                     printf("buffer is full\n");
                 }
 
-                // printf("Accel: X=%.2f, Y=%.2f, Z=%.2f | Gyro: X=%.2f, Y=%.2f, Z=%.2f \n", ax, ay, az, gx, gy, gz);
+                printf("%.2f, %.2f, %.2f, %.2f,%.2f, %.2f \n", ax, ay, az, gx, gy, gz);
 
             } else {
                 printf("Failed to read imu data\n");
@@ -261,7 +265,6 @@ void imu_task(void *pvParameters) {
 
 }
 
-
 static void usbTask(void *arg) {
     (void)arg;
     while (1) {
@@ -269,23 +272,6 @@ static void usbTask(void *arg) {
     }
 }
 
-/*void tud_cdc_rx_cb(uint8_t itf) {
-    uint8_t buf[BUFFER_SIZE + 1];
-    uint32_t count = tud_cdc_n_read(itf, buf, sizeof(buf) - 1);
-
-    // Always read from both interfaces to avoid stalling CDC0
-    if (itf == 0) tud_cdc_read_flush();  
-
-    // Null-terminate to make it a string
-    buf[count] = '\0';
-
-    // Show on the display
-    write_text((char *)buf);
-
-    // Send acknowledgment back to host
-    tud_cdc_n_write(itf, (uint8_t const *)"OK\n", 3);
-    tud_cdc_n_write_flush(itf);
-}*/
 
 void tud_cdc_rx_cb(uint8_t itf) {
     uint8_t buf[64];
