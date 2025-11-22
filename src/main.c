@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <math.h>
 
 
@@ -106,6 +107,14 @@ void feedback(const char *text) {
     }
 }
 
+void addChar(char *s, char c) {
+    while (*s) {
+        s++;
+    }
+    *s = c;   
+    *(s + 1) = '\0';
+}
+
 void commTask(void *pvParameters) {
     (void)pvParameters;
     
@@ -150,6 +159,19 @@ void commTask(void *pvParameters) {
                             is_morse = false;
                             break;
                         }
+                        char text[BUFFER_SIZE] = "";
+                        addChar(text, i);
+                        if (strstr(text, "  .clear  ")) {
+                            printf("helloooo");
+                            //function for clearin the terminal
+                            is_morse = true;
+                            system("clear");
+                        } else if (strstr(text, "  .stop  ")) {
+                            printf("bye");
+                            //function for stopping the program
+                            is_morse = true;
+                            exit(0);
+                        }
                     }
 
                     if (is_morse) {
@@ -162,7 +184,7 @@ void commTask(void *pvParameters) {
                         vTaskDelay(pdMS_TO_TICKS(10000));
                     } else {
                         // regular text
-                        write_text(recv_buffer);
+                        printf("not morse");
                         vTaskDelay(pdMS_TO_TICKS(10000));
                     }
 
@@ -189,7 +211,6 @@ void commTask(void *pvParameters) {
     
 }
 
-
 void imu_task(void *pvParameters) {
     (void)pvParameters;
 
@@ -208,20 +229,21 @@ void imu_task(void *pvParameters) {
     for(;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("IMU activated");
-        int lift_count = 0;
+        float peak_value = 0;
+        bool peak_reached = false;
+        bool accepted = false;
         while (1)
         {
             if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0) {
-                //float accerl_mag = sqrt(ax*ax + ay*ay + az*az);
-                //float gyro_mag = sqrt(gx * gx + gy * gy + gz * gz);
                 if (buffer_index < (BUFFER_SIZE-3)) {
-                    if ((fabs(gx) > 70 || fabs(gy) > 130 || fabs(gz) > 180) && fabs(ax) > 1.5)  { //az > FLAT_THRESHOLD ||
+                    if (((fabs(gx) > 50 || fabs(gy) > 50 || fabs(gz) > 100) && fabs(ax) > 0.9) && (ax != -4.00 && ay != -4.00 && az != -4.00))  {
+                        printf("current values: gx %.2f, gy %.2f, gz %.2f \n", gx, gy, gz);
                         printf("dot\n");
                         send_buffer[buffer_index++] = '.';
                         blink_red_led(1);
                         buzzer_play_tone(440,500);
-                        vTaskDelay(pdMS_TO_TICKS(2000));
-                        lift_count = 0;
+                        peak_reached = false;
+                        accepted = false;
                     }
                     //DASH: rotating 90 degrees
                     /*else if (ay > TILT_THRESHOLD) {
@@ -231,7 +253,7 @@ void imu_task(void *pvParameters) {
                         buzzer_play_tone(800,200);
                         vTaskDelay(pdMS_TO_TICKS(2000));
                     }*/
-                    else if (fabs(az) > 0.6 && fabs(az) < 2.0 && fabs(ax) < 1.0 && fabs(ay) < 1.0 && (fabs(gx) > 5 && fabs(gy) > 5) && (fabs(gx) < 70 && fabs(gy) < 100)) {
+                    /*else if (fabs(az) > 0.6 && fabs(az) < 2.0 && fabs(ax) < 1.0 && fabs(ay) < 1.0 && (fabs(gx) > 5 && fabs(gy) > 5) && (fabs(gx) < 70 && fabs(gy) < 100)) {
                         lift_count++;
                         printf("count %d \n", lift_count);
                         if (lift_count >= 3) { // require two consecutive readings below threshold
@@ -243,7 +265,33 @@ void imu_task(void *pvParameters) {
                             vTaskDelay(pdMS_TO_TICKS(2000));
                             
                         }
-                    } 
+                    } */
+                    else if ((fabs(ay) > 0.15 && (fabs(gz) > 3.0 || fabs(gx) > 3.0 || fabs(gy) > 3.0) && (fabs(gz) < 100.0 && fabs(gx) < 50.0 && fabs(gy) < 50.0)) || accepted) {
+                        printf("hello\n");
+                        accepted = true;
+                        float distance_one = ay;
+                        if (fabs(ay) >= peak_value && !peak_reached) {
+                            printf("bigger than peak\n");
+                            peak_value = fabs(ay);
+                            printf("peak value: %.2f and ay: %.2f \n", peak_value, ay);
+                        } else {
+                            printf("peak reach\n");
+                            peak_reached = true;
+                            printf("current values: gx %.2f, gy %.2f, gz %.2f \n", gx, gy, gz);
+                        }
+                        float distance = peak_value - distance_one;
+                        printf("%.2f, %.2f, %.2f, %.2f,%.2f, %.2f \n", ax, ay, az, gx, gy, gz);
+                        printf("distance: %.2f", distance);
+                        if (peak_reached && fabs(az - 1.0) < 0.2 && (fabs(gz) < 24.0) && distance > 0.3) {
+                            printf("dash\n");
+                            send_buffer[buffer_index++] = '-';
+                            blink_red_led(1);
+                            buzzer_play_tone(440,500);
+                            peak_reached = false;
+                            peak_value = 0;
+                            accepted = false;
+                        }          
+                    }
                 }
                 else {
                     printf("buffer is full\n");
