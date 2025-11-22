@@ -154,26 +154,25 @@ void commTask(void *pvParameters) {
 
                     // check if the received message is in morse
                     bool is_morse = true;
+                    char text[BUFFER_SIZE] = "";
                     for (int i = 0; recv_buffer[i]; i++) {
                         if (recv_buffer[i] != '.' && recv_buffer[i] != '-' && recv_buffer[i] != ' ') {
                             is_morse = false;
                             break;
                         }
-                        char text[BUFFER_SIZE] = "";
-                        addChar(text, i);
-                        if (strstr(text, "  .clear  ")) {
+                        addChar(text, recv_buffer[i]);
+                    }
+                    if (strstr(text, "  .clear  ")) {
                             printf("helloooo");
                             //function for clearin the terminal
                             is_morse = true;
                             system("clear");
-                        } else if (strstr(text, "  .stop  ")) {
-                            printf("bye");
-                            //function for stopping the program
-                            is_morse = true;
-                            exit(0);
-                        }
+                    } else if (strstr(text, "  .stop  ")) {
+                        printf("bye");
+                        //function for stopping the program
+                        is_morse = true;
+                        exit(0);
                     }
-
                     if (is_morse) {
                         char decoded_text[BUFFER_SIZE] = {0};
                         decode_morse_message(recv_buffer, decoded_text);
