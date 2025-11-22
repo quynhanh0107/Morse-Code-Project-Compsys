@@ -160,9 +160,9 @@ void commTask(void *pvParameters) {
                             is_morse = false;
                             break;
                         }
-                        addChar(text, recv_buffer[i]);
+                        //addChar(text, recv_buffer[i]);
                     }
-                    if (strstr(text, "  .clear  ")) {
+                    /*if (strstr(text, "  .clear  ")) {
                             printf("helloooo");
                             //function for clearin the terminal
                             is_morse = true;
@@ -172,7 +172,7 @@ void commTask(void *pvParameters) {
                         //function for stopping the program
                         is_morse = true;
                         exit(0);
-                    }
+                    }*/
                     if (is_morse) {
                         char decoded_text[BUFFER_SIZE] = {0};
                         decode_morse_message(recv_buffer, decoded_text);
@@ -183,7 +183,7 @@ void commTask(void *pvParameters) {
                         vTaskDelay(pdMS_TO_TICKS(10000));
                     } else {
                         // regular text
-                        printf("not morse");
+                        printf(recv_buffer);
                         vTaskDelay(pdMS_TO_TICKS(10000));
                     }
 
