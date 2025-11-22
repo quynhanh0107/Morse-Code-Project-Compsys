@@ -192,9 +192,9 @@ void commTask(void *pvParameters) {
 
 void imu_task(void *pvParameters) {
     (void)pvParameters;
-    
+
     float ax, ay, az, gx, gy, gz, t;
-    // Setting up the sensor. 
+    // Setting up the sensor.
     if (init_ICM42670() == 0) {
         printf("ICM-42670P initialized successfully!\n");
         if (ICM42670_start_with_default_values() != 0){
@@ -208,16 +208,18 @@ void imu_task(void *pvParameters) {
     for(;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("IMU activated");
+        int freefall_count = 0;
         while (1)
         {
             if (ICM42670_read_sensor_data(&ax, &ay, &az, &gx, &gy, &gz, &t) == 0) {
+                float accerl_mag = sqrtf(ax*ax + ay*ay + az*az);
                 if (buffer_index < (BUFFER_SIZE-3)) {
-                    if (az > FLAT_THRESHOLD) {
+                    if (az > FLAT_THRESHOLD || fabs(az) > SHAKE_THRESHOLD) {
                         printf("dot\n");
                         send_buffer[buffer_index++] = '.';
                         blink_red_led(1);
                         buzzer_play_tone(440,500);
-                        vTaskDelay(pdMS_TO_TICKS(10000));
+                        vTaskDelay(pdMS_TO_TICKS(2000));
                     }
                     //DASH: rotating 90 degrees
                     else if (ay > TILT_THRESHOLD) {
@@ -225,13 +227,24 @@ void imu_task(void *pvParameters) {
                         send_buffer[buffer_index++] = '-';
                         blink_red_led(2);
                         buzzer_play_tone(800,200);
-                        vTaskDelay(pdMS_TO_TICKS(10000));
+                        vTaskDelay(pdMS_TO_TICKS(2000));
+                    }
+                    else if (accerl_mag < FREEFALL_THRESHOLD) {
+                        freefall_count++;
+                        if (freefall_count >= 2) { // require two consecutive readings below threshold
+                            send_buffer[buffer_index++] = ' ';
+                            blink_red_led(3);
+                            vTaskDelay(pdMS_TO_TICKS(2000));
+                            freefall_count = 0;
+                        }
+                    } else {
+                        freefall_count = 0; // reset counter if reading is above threshold
                     }
                 }
                 else {
                     printf("buffer is full\n");
                 }
-            
+
                 // printf("Accel: X=%.2f, Y=%.2f, Z=%.2f | Gyro: X=%.2f, Y=%.2f, Z=%.2f \n", ax, ay, az, gx, gy, gz);
 
             } else {
@@ -240,13 +253,14 @@ void imu_task(void *pvParameters) {
             vTaskDelay(pdMS_TO_TICKS(400));
             if (myState != IDLE) { //maybe change it to if (myState != SEND)
                 break;
-            }   
+            }
         }
     }
     // Start collection data here. Infinite loop.
-    
+
 
 }
+
 
 static void usbTask(void *arg) {
     (void)arg;
