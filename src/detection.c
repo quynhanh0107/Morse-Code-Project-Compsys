@@ -3,6 +3,9 @@
 #include <math.h>
 #include <stdio.h>
 
+/* =========================
+ *  DOT DETECTION
+ * ========================= */
 void dot_detection(float gx, float gy, float gz)
 {
     printf("dot\n");
@@ -11,6 +14,10 @@ void dot_detection(float gx, float gy, float gz)
     buzzer_play_tone(440, 500);
 }
 
+
+/* =========================
+ *  DASH DETECTION
+ * ========================= */
 void dash_detection(float ay, float az, float gz,
                     float *peak_value, bool *peak_reached, bool *accepted)
 {
@@ -42,6 +49,9 @@ void dash_detection(float ay, float az, float gz,
     }
 }
 
+/* =========================
+ *  SHAKE CHECK  (DOT)
+ * =========================*/
 bool shaking_check(float ax, float ay, float az, float gx, float gy, float gz)
 {
     return ((fabs(gx) > 50 || fabs(gy) > 50 || fabs(gz) > 100)
@@ -49,6 +59,9 @@ bool shaking_check(float ax, float ay, float az, float gx, float gy, float gz)
              && ax != -4.0 && ay != -4.0 && az != -4.0);
 }
 
+/* =========================
+ *  LIFT CHECK  (DASH)
+ * =========================*/
 bool lifting_check(float ay, float gx, float gy, float gz)
 {
     return (fabs(ay) > 0.15 &&
