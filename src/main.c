@@ -29,7 +29,11 @@ Finalized 23.11.2025
 #include "buzzer.h"
 #include "morse_translate.h"
 
-//Define global varibales and pins.
+
+
+/* ===================================
+ *  GLOBAL VARIABLES (DECLARED IN main.h)
+ * =================================== */
 
 #define BUFFER_SIZE 40
 
@@ -46,7 +50,11 @@ int buffer_index = 0;
 char recv_buffer[BUFFER_SIZE]= {0};
 int  recv_index = 0;
 
-//songs/sounds to play:
+
+
+/* ===================================
+ *  SONGS 
+ * =================================== */
 int happy_birthday[][2] = {
     {NOTE_C4, 400}, {NOTE_C4, 200}, {NOTE_D4, 400}, {NOTE_C4, 400},
     {NOTE_F4, 400}, {NOTE_E4, 800},
@@ -64,7 +72,10 @@ int iphone_alarm[][2] = {
     {REST, 0}      // End
 };
 
-// Introducing states
+
+/* ===================================
+ *  STATES 
+ * =================================== */
 enum state {IDLE=1, SEND, RECEIVE};
 
 // Global state variable, initialized to idle state
@@ -77,6 +88,12 @@ volatile bool imu_flag = true;
 
 // Button task to switch states and adding space
 // Needs an interrupt in main
+
+
+
+/* ===================================
+ *  BUTTON HANDLERS 
+ * =================================== */
 //Enable one of the buttons and define the events handler (interrupt) for button presses
 void button_callback(uint gpio, uint32_t events) 
 {
@@ -135,6 +152,10 @@ void button_callback(uint gpio, uint32_t events)
     
 }
 
+
+/* ===================================
+ *  FEEDBACK SOUND 
+ * =================================== */
 //Function for buzzer sounds of different morse characters
 void feedback(const char *text) 
 {
@@ -157,7 +178,6 @@ void feedback(const char *text)
     }
 }
 
-
 //Adding characters from array into a string
 void addChar(char *s, char c) 
 {
@@ -169,6 +189,10 @@ void addChar(char *s, char c)
     *(s + 1) = '\0';
 }
 
+
+/* ===================================
+ * COMMUNICATION TASK (SEND + RECEIVE MODES)
+ * =================================== */
 //Communication task, used in both state receive and send.
 void commTask(void *pvParameters) 
 {
@@ -176,7 +200,9 @@ void commTask(void *pvParameters)
     
     while (1) 
     {
-        //When state is send:
+        /* ===================================
+         * SEND MODE
+         * =================================== */
         if (myState == SEND) 
         {
             printf("Sending");
@@ -209,7 +235,9 @@ void commTask(void *pvParameters)
             //Back to the imu task.
             xTaskNotifyGive(imuTaskHandle);
             
-        //When state is receive
+         /* ===================================
+         * RECEIVE MODE
+         * =================================== */
         } 
         else if (myState == RECEIVE) 
         {
@@ -301,6 +329,10 @@ void commTask(void *pvParameters)
     }
 }
 
+
+/* ===================================
+ * IMU 
+ * =================================== */
 //Task for reading the imu
 void imu_task(void *pvParameters) 
 {
@@ -436,7 +468,9 @@ void imu_task(void *pvParameters)
     }
 }
 
-
+ /* ===================================
+  * USB RX CALLBACK — receives terminal characters
+  * =================================== */
 //This function is automatically called whenever new USB serial data arrives.
 void tud_cdc_rx_cb(uint8_t itf) 
 {
@@ -464,7 +498,9 @@ void tud_cdc_rx_cb(uint8_t itf)
     }
 }
 
-
+/* ===================================
+ * MAIN
+ * =================================== */
 int main() 
 {
     //Initialize everything necessary
