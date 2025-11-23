@@ -33,7 +33,7 @@ Finalized 23.11.2025
 
 #define BUFFER_SIZE 40
 
-//Initialize the input queu used for when receiving messages.
+//Initialize the input queue used for when receiving messages.
 QueueHandle_t inputQueue;
 //Initialize and define the task handle.
 TaskHandle_t imuTaskHandle = NULL;
