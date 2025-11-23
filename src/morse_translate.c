@@ -7,6 +7,9 @@
 
 #include "morse_translate.h"
 
+/* =========================
+ *  MORSE TABLE (LOOKUP)
+ * ========================= */
 const morse_table_t morse_table[] = {
     {'A', ".-"},    {'B', "-..."},  {'C', "-.-."},  {'D', "-.."},
     {'E', "."},     {'F', "..-."},  {'G', "--."},   {'H', "...."},
@@ -20,6 +23,10 @@ const morse_table_t morse_table[] = {
     
 const size_t MORSE_TABLE_SIZE = sizeof(morse_table) / sizeof(morse_table[0]);
 
+
+/* =========================
+ *  MORSE → ASCII LOOKUP
+ * ========================= */
 // This functon converts a morse symbol into a letter, if nothing matches then it returns a "?"
 char morse_to_ascii(const char *morse) {
     for (size_t i = 0; i < MORSE_TABLE_SIZE; i++)
@@ -29,6 +36,10 @@ char morse_to_ascii(const char *morse) {
     return '?';
 }
 
+
+/* =========================
+ *  MORSE MESSAGE DECODER
+ * ========================= */
 // This function takes a morse code message and turns it into normal text
 void decode_morse_message(const char *morse, char *output) {
 
