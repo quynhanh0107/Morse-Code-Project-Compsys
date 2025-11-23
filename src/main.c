@@ -29,19 +29,6 @@ Finalized 23.11.2025
 
 #define BUFFER_SIZE 40
 
-//#define TILT_THRESHOLD 0.98
-//#define FLAT_THRESHOLD 0.98
-//#define SHAKE_THRESHOLD 50.0
-//#define FREEFALL_THRESHOLD 0.30
-//#define DEBOUNCE_TIME 5000
-
-//Pins for the buttons in the pico. 
-#define SW1_PIN 02
-#define SW2_PIN 22
-//Buttons of the pico
-#define BUTTON_SW1 SW1_PIN
-#define BUTTON_SW2 SW2_PIN
-
 //Initialize the input queu used for when receiving messages.
 QueueHandle_t inputQueue;
 //Initialize and define the task handle.
@@ -98,7 +85,6 @@ void button_callback(uint gpio, uint32_t events) {
             //Thoughts: Why don't we just have three space for to switch state to send? So the other button could just switch between Idle and Receive
             printf("RECEIVE and then to SEND");
             myState = SEND;
-            //xTaskNotifyGive(imuTaskHandle);
         } else if (myState == IDLE) {
             //From state idle to state Receive
             printf("IDLE and then to RECEIVE");
@@ -185,10 +171,11 @@ void commTask(void *pvParameters) {
             //When state is receive:
         } else if (myState == RECEIVE) {
             char c;
-
+            //read one character from the queue and then copy it into c 
             if (xQueueReceive(inputQueue, &c, 0) == pdTRUE) {
-
+                //this checks if the user pressed Enter. 
                 if (c == '\n' || c == '\r') {
+                    //adds a null terminator at the end of the receive buffer.
                     recv_buffer[recv_index] = '\0';
 
                     //Initialize buzzer
@@ -288,6 +275,7 @@ void imu_task(void *pvParameters) {
     init_buzzer();
     init_red_led();
     for(;;) {
+        //Waiting for a task notification, wait forever until it's waken up as done in the next line
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         printf("IMU activated");
         //Setting some basic variables to read movements.
@@ -402,18 +390,31 @@ static void usbTask(void *arg) {
     }
 }
 
-
+//This function is automatically called whenever new USB serial data arrives.
 void tud_cdc_rx_cb(uint8_t itf) {
     uint8_t buf[64];
+    
+    // Read incoming bytes from TinyUSB internal buffer into 'buf'
+    // Returns the number of bytes actually read.
     uint32_t count = tud_cdc_n_read(itf, buf, sizeof(buf));
 
+    // Process each received byte individually
     for (uint32_t i = 0; i < count; i++) {
         char c = buf[i];
+        
+        // Flag for FreeRTOS to know if sending to the queue should wake a task
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+        // Send the character into the FreeRTOS queue
+        // Must use the *FromISR version because we are inside an interrupt context
         xQueueSendFromISR(inputQueue, &c, &xHigherPriorityTaskWoken);
+        
+        // If sending this character unblocked a higher-priority task,
+        // request a context switch after the ISR finishes.
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 }
+
 
 int main() {
     //Initialize everything necessary
