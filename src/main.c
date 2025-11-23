@@ -2,7 +2,7 @@
 
 
 Computer Systems Module 2 course project
-Created by Tinja Untinen, Le Phuong Ling, Le Quynh-Anh
+Created by Tinja Untinen, Le Phuong Linh, Le Quynh Anh
 Finalized 23.11.2025
 
 
@@ -74,7 +74,7 @@ int iphone_alarm[][2] = {
 };
 
 // Introducing states
-enum state {IDLE=1, SEND, RECEIVE, UPDATE};
+enum state {IDLE=1, SEND, RECEIVE};
 
 // Global state variable, initialized to idle state
 enum state myState = IDLE;
