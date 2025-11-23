@@ -23,6 +23,9 @@ Finalized 23.11.2025
 
 #include "tkjhat/sdk.h"
 #include "tkjhat/pins.h"
+
+#include "main.h"
+#include "detection.h"
 #include "buzzer.h"
 #include "morse_translate.h"
 
