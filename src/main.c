@@ -78,38 +78,55 @@ volatile bool imu_flag = true;
 // Button task to switch states and adding space
 // Needs an interrupt in main
 //Enable one of the buttons and define the events handler (interrupt) for button presses
-void button_callback(uint gpio, uint32_t events) {
+void button_callback(uint gpio, uint32_t events) 
+{
     // Since pressing three spaces triggers a send we set the space_count to 0 here
     static int space_count = 0;
+    
     // Button 1 pressed: changing states
-    if (gpio == BUTTON_SW1) {
-        if (myState == RECEIVE) {
+    if (gpio == BUTTON_SW1) 
+    {
+        if (myState == RECEIVE) 
+        {
             //From state Receive to state Send.
             //!!!!!
             //Thoughts: Why don't we just have three space for to switch state to send? So the other button could just switch between Idle and Receive
             printf("RECEIVE and then to SEND");
+            
             myState = SEND;
-        } else if (myState == IDLE) {
+        } 
+        else if (myState == IDLE) 
+        {
+            
             //From state idle to state Receive
             printf("IDLE and then to RECEIVE");
+            
             myState = RECEIVE;
         }
     //Button 2 pressed: if pressed once, considered space, if pressed three times back to back becomes a send
-    } else if (gpio == BUTTON_SW2) {
+    } 
+    else if (gpio == BUTTON_SW2) 
+    {
         //Here we use imu_flag to make sure imu is active and if space count reaches three, won't be added to the buffer
-        if (imu_flag) {
+        if (imu_flag) 
+        {
             //Adding space to send_buffer
             send_buffer[buffer_index++] = ' ';
             printf("space\n");
         }
+
         //Counting the spaces
         space_count++;
-        if (space_count >= 3) {
+        
+        if (space_count >= 3) 
+        {
             //Discontinue imu_flag
             imu_flag = false;
+            
             //Reset the space_count
             space_count = 0;
-            //Switching state from idle to sending, since data reading happends in IDLE
+            
+            //Switching state from idle to sending, since data reading happens in IDLE
             if (myState == IDLE) {
                 myState = SEND;
             } 
@@ -119,15 +136,22 @@ void button_callback(uint gpio, uint32_t events) {
 }
 
 //Function for buzzer sounds of different morse characters
-void feedback(const char *text) {
+void feedback(const char *text) 
+{
     //Going through the morse sent.
-    for (int i = 0; i < strlen(text) + 1; i++) {
-        if (text[i] == '.') {
+    for (int i = 0; i < strlen(text) + 1; i++) 
+    {
+        if (text[i] == '.') 
+        {
             //First value is about the frequency and next about the duration of the sound.
             buzzer_play_tone(440,500);
-        } else if (text[i] == '-') {
+        } 
+        else if (text[i] == '-') 
+        {
             buzzer_play_tone(800,200);
-        } else if (text[i] == ' ') {
+        } 
+        else if (text[i] == ' ') 
+        {
             buzzer_play_tone(200,800);
         }
     }
@@ -135,8 +159,10 @@ void feedback(const char *text) {
 
 
 //Adding characters from array into a string
-void addChar(char *s, char c) {
-    while (*s) {
+void addChar(char *s, char c) 
+{
+    while (*s) 
+    {
         s++;
     }
     *s = c;   
@@ -144,62 +170,82 @@ void addChar(char *s, char c) {
 }
 
 //Communication task, used in both state receive and send.
-void commTask(void *pvParameters) {
+void commTask(void *pvParameters) 
+{
     (void)pvParameters;
     
-    while (1) {
+    while (1) 
+    {
         //When state is send:
-        if (myState == SEND) {
+        if (myState == SEND) 
+        {
             printf("Sending");
+            
             //for loop to go through the send_buffer
-            for (int i = 0; i < sizeof(send_buffer); i++) {
+            for (int i = 0; i < sizeof(send_buffer); i++) 
+            {
                 //printing the buffer to terminal
                 printf("%c",send_buffer[i]);
             }
+            
             //Printing the send_buffer to lcd
             write_text(send_buffer);
+            
             //delay to display the text for a while
             vTaskDelay(pdMS_TO_TICKS(10000));
 
             // Clearing the buffer with memset
             memset(send_buffer, 0, BUFFER_SIZE);
+            
             //Setting buffer_index back to zero for next sending
             buffer_index = 0;
 
-            //Clearing display:
+            //Clearing display
             clear_display();
+            
             // then change the state back to idle, for reading next values to be sent
             myState = IDLE;
+            
             //Back to the imu task.
             xTaskNotifyGive(imuTaskHandle);
-            //When state is receive:
-        } else if (myState == RECEIVE) {
+            
+        //When state is receive
+        } 
+        else if (myState == RECEIVE) 
+        {
             char c;
+            
             //read one character from the queue and then copy it into c 
-            if (xQueueReceive(inputQueue, &c, 0) == pdTRUE) {
+            if (xQueueReceive(inputQueue, &c, 0) == pdTRUE) 
+            {
                 //this checks if the user pressed Enter. 
-                if (c == '\n' || c == '\r') {
+                if (c == '\n' || c == '\r') 
+                {
                     //adds a null terminator at the end of the receive buffer.
                     recv_buffer[recv_index] = '\0';
 
                     //Initialize buzzer
                     init_buzzer();
+                    
                     //Show what was received from user's input to terminal
                     printf("Received: %s\n", recv_buffer);
+                    
                     //iphone alarm played to show that the pico received the message
                     buzzer_play_melody(iphone_alarm);
 
                     // check if the received message is in morse
                     bool is_morse = true;
-                    //char text[BUFFER_SIZE] = "";
+                    
                     //Go through the buffer character by character to check for non morse characters.
-                    for (int i = 0; recv_buffer[i]; i++) {
-                        if (recv_buffer[i] != '.' && recv_buffer[i] != '-' && recv_buffer[i] != ' ') {
+                    for (int i = 0; recv_buffer[i]; i++) 
+                    {
+                        if (recv_buffer[i] != '.' && recv_buffer[i] != '-' && recv_buffer[i] != ' ') 
+                        {
                             is_morse = false;
+                            
                             //Once there is a single incorrect character there's no need to check the rest.
                             break;
                         }
-                        //addChar(text, recv_buffer[i]);
                     }
                     /*if (strstr(text, "  .clear  ")) {
                             printf("helloooo");
@@ -212,8 +258,10 @@ void commTask(void *pvParameters) {
                         is_morse = true;
                         exit(0);
                     }*/
+                    
                     //If no wrong characters are found text is written to pico lcd
-                    if (is_morse) {
+                    if (is_morse) 
+                    {
                         char decoded_text[BUFFER_SIZE] = {0};
                         //Making the morse code message into abcs writing.
                         decode_morse_message(recv_buffer, decoded_text);
@@ -225,28 +273,25 @@ void commTask(void *pvParameters) {
                         feedback(recv_buffer);
                         //Show message for some time
                         vTaskDelay(pdMS_TO_TICKS(10000));
-                    } else {
+                    } 
+                    else 
+                    {
                         // regular text
                         printf(recv_buffer);
+                        
                         //more delays to slow things down
                         vTaskDelay(pdMS_TO_TICKS(10000));
                     }
-
-                    /*write_text(recv_buffer);
-                    feedback(recv_buffer);
-                    vTaskDelay(pdMS_TO_TICKS(10000));*/   // show message
-
-                    //Clearing the recv_buffer
+                    
                     memset(recv_buffer, 0, BUFFER_SIZE);
-                    //Resetting index for next time
                     recv_index = 0;
-
-                    //clearing display
+                    
                     clear_display();
                     vTaskDelay(pdMS_TO_TICKS(200));
                 }
                 //if max index is not reached the charactes is added to the recv_buffer
-                else if (recv_index < BUFFER_SIZE - 1) {
+                else if (recv_index < BUFFER_SIZE - 1) 
+                {
                     recv_buffer[recv_index++] = c;
                 }
             }
@@ -254,21 +299,25 @@ void commTask(void *pvParameters) {
         //Necessary delays
         vTaskDelay(pdMS_TO_TICKS(100));
     }
-
-    
 }
+
 //Task for reading the imu
-void imu_task(void *pvParameters) {
+void imu_task(void *pvParameters) 
+{
     (void)pvParameters;
+    
     //Defining the imu reading values
     //a: acceleration
     //g: gyroscope
     //t: time
     float ax, ay, az, gx, gy, gz, t;
+    
     // Setting up the sensor.
-    if (init_ICM42670() == 0) {
+    if (init_ICM42670() == 0) 
+    {
         //Make sure everything is initialize correctly with terminal messaging.
         printf("ICM-42670P initialized successfully!\n");
+        
         if (ICM42670_start_with_default_values() != 0){
             printf("ICM-42670P could not initialize accelerometer or gyroscope");
         }
@@ -389,7 +438,8 @@ void imu_task(void *pvParameters) {
 
 
 //This function is automatically called whenever new USB serial data arrives.
-void tud_cdc_rx_cb(uint8_t itf) {
+void tud_cdc_rx_cb(uint8_t itf) 
+{
     uint8_t buf[64];
     
     // Read incoming bytes from TinyUSB internal buffer into 'buf'
@@ -397,7 +447,8 @@ void tud_cdc_rx_cb(uint8_t itf) {
     uint32_t count = tud_cdc_n_read(itf, buf, sizeof(buf));
 
     // Process each received byte individually
-    for (uint32_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < count; i++) 
+    {
         char c = buf[i];
         
         // Flag for FreeRTOS to know if sending to the queue should wake a task
@@ -414,7 +465,8 @@ void tud_cdc_rx_cb(uint8_t itf) {
 }
 
 
-int main() {
+int main() 
+{
     //Initialize everything necessary
     stdio_init_all();
     sleep_ms(2000); //Wait to see the output.
@@ -423,15 +475,15 @@ int main() {
     init_sw2();
     init_display();
     init_buzzer();
-    while (!stdio_usb_connected()){
+    
+    while (!stdio_usb_connected())
+    {
         sleep_ms(10);
     } 
-    printf("Start tests\n");
+
     //Play song for starting the program
     buzzer_play_melody(happy_birthday);
-    /*write_text("Start...");
-    vTaskDelay(400);
-    clear_display();*/
+  
     // Setup buttons (already initialized in SDK, we only attach callbacks)
     gpio_set_irq_enabled_with_callback(BUTTON_SW1, GPIO_IRQ_EDGE_FALL, true, button_callback);
     gpio_set_irq_enabled(BUTTON_SW2, GPIO_IRQ_EDGE_FALL, true);
@@ -450,7 +502,7 @@ int main() {
         vTaskCoreAffinitySet(hUsb, 1u << 0);
     #endif
     tusb_init();
-    //usb_serial_init();
+    
     // Start the FreeRTOS scheduler
     vTaskStartScheduler();
     return 0;
