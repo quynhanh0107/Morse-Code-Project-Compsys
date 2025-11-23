@@ -387,12 +387,6 @@ void imu_task(void *pvParameters) {
     }
 }
 
-static void usbTask(void *arg) {
-    (void)arg;
-    while (1) {
-        tud_task();   // handle USB stack events
-    }
-}
 
 //This function is automatically called whenever new USB serial data arrives.
 void tud_cdc_rx_cb(uint8_t itf) {
