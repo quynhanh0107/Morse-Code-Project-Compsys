@@ -22,6 +22,7 @@ Finalized 23.11.2025
 #include "tusb.h"
 
 #include "tkjhat/sdk.h"
+#include "tkjhat/pins.h"
 #include "buzzer.h"
 #include "morse_translate.h"
 
